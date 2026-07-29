@@ -1,0 +1,12 @@
+# Archivos de variables de entorno
+.env
+*.env.local
+
+# Datos
+storage/
+config/**/data/
+config/**/db/
+
+# Logs
+logs/
+*.log

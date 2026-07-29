@@ -1,0 +1,36 @@
+  networks:
+    # Reverse proxy network
+    edge_net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 10.0.0.0/24      
+
+    # Cloudflare tunnel network
+    tunnel_net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 10.10.0.0/24
+
+    # DNS network
+    dns_net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 10.20.0.0/24
+
+    # Apps network
+    apps_net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 10.30.0.0/24
+
+    # Storage network (Internal network)
+    storage_net:
+      driver: bridge
+      internal: true
+      ipam:
+        config:
+          - subnet: 10.40.0.0/24
