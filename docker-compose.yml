@@ -1,3 +1,41 @@
+  services:
+
+    # --- REVERSE PROXY ---
+    npm:
+      image: 'jc21/nginx-proxy-manager:latest'
+      container_name: npm
+      restart: unless-stopped
+      ports:
+        - '80:80'     # Tráfico HTTP web público/local
+        - '443:443'   # Tráfico HTTPS web cifrado
+        - '81:81'     # Panel web de administración de NPM
+      volumes:
+        - ./config/npm/data:/data
+        - ./config/npm/letsencrypt:/etc/letsencrypt
+      networks:
+        edge_net:
+          ipv4_address: 10.0.0.10
+
+    # --- ADGUARD HOME ---
+    adguardhome:
+      image: adguard/adguardhome:latest
+      container_name: adguardhome
+      restart: unless-stopped
+      ports:
+        # Puerto DNS (TCP y UDP)
+        - "53:53/tcp"
+        - "53:53/udp"
+        # Descomentar las siguientes líneas SOLO la primera vez para ejecutar el asistente inicial e ingresar a la interfaz web de AdGuard Home y añadir filtro *.home apuntando a la ip fija del server. Luego comentar nuevamente para evitar tener abiertos puertos innecesarios.:
+        #- "3000:3000/tcp"
+        #- "8080:80/tcp"
+      volumes:
+        - ./config/adguard/work:/opt/adguardhome/work
+        - ./config/adguard/conf:/opt/adguardhome/conf
+      networks:
+        dns_net:
+          ipv4_address: 10.20.0.10
+        edge_net:
+
   networks:
     # Reverse proxy network
     edge_net:

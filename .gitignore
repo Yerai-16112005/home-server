@@ -1,12 +1,23 @@
-# Archivos de variables de entorno
+# Archivos de variables de entorno y secretos
 .env
+*.env
 *.env.local
 
-# Datos
+# Nginx Proxy Manager (Datos y Certificados SSL)
+config/npm/data/
+config/npm/letsencrypt/
+
+# AdGuard Home (Bases de datos dinámicas y configuración local)
+config/adguard/work/
+config/adguard/conf/
+
+# Almacenamiento general y datos persitentes
 storage/
-config/**/data/
-config/**/db/
 
 # Logs
 logs/
 *.log
+
+# Basura del sistema operativo
+.DS_Store
+Thumbs.db
