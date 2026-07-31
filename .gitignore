@@ -3,13 +3,8 @@
 *.env
 *.env.local
 
-# Nginx Proxy Manager (Datos y Certificados SSL)
-config/npm/data/
-config/npm/letsencrypt/
-
-# AdGuard Home (Bases de datos dinámicas y configuración local)
-config/adguard/work/
-config/adguard/conf/
+#Archivos de configuración de contenedores generados por los contenedores al iniciar y configurarse
+config/
 
 # Almacenamiento general y datos persitentes
 storage/
@@ -21,3 +16,5 @@ logs/
 # Basura del sistema operativo
 .DS_Store
 Thumbs.db
+
+notas.txt
