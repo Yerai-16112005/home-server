@@ -6,15 +6,17 @@
       container_name: npm
       restart: unless-stopped
       ports:
-        - '80:80'     # Tráfico HTTP web público/local
-        - '443:443'   # Tráfico HTTPS web cifrado
-        - '81:81'     # Panel web de administración de NPM
+        - '80:80'     
+        - '443:443'   
+        - '81:81'     
       volumes:
         - ./config/npm/data:/data
         - ./config/npm/letsencrypt:/etc/letsencrypt
       networks:
         edge_net:
           ipv4_address: 10.0.0.10
+        apps_net:
+          ipv4_address: 10.30.0.10
 
     # --- ADGUARD HOME ---
     adguardhome:
@@ -35,6 +37,33 @@
         dns_net:
           ipv4_address: 10.20.0.10
         edge_net:
+
+    # --- PORTAINER ---
+    portainer:
+      image: portainer/portainer-ce:latest
+      container_name: portainer
+      restart: unless-stopped
+      security_opt:
+        - no-new-privileges:true
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+        - ./config/portainer:/data
+      networks:
+        apps_net:
+          ipv4_address: 10.30.0.20
+
+    # --- DOZZLE ---
+    dozzle:
+      image: amir20/dozzle:latest
+      container_name: dozzle
+      restart: unless-stopped
+      security_opt:
+        - no-new-privileges:true
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+      networks:
+        apps_net:
+          ipv4_address: 10.30.0.30
 
   networks:
     # Reverse proxy network
