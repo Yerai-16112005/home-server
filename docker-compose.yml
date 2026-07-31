@@ -65,6 +65,32 @@
         apps_net:
           ipv4_address: 10.30.0.30
 
+    samba:
+      image: dperson/samba:latest
+      container_name: samba
+      restart: unless-stopped
+      ports:
+        - "139:139"
+        - "445:445"
+      volumes:
+        - ./storage/public:/storage/public
+        - ./storage/media:/storage/media
+        - ./storage/users:/storage/users
+      environment:
+        TZ: Europe/Madrid
+      command:
+        - -u
+        - "${SAMBA_USER};${SAMBA_PASSWORD}"
+        - -s
+        - "Public;/storage/public;yes;no;yes;all;none"
+        - -s
+        - "Media;/storage/media;yes;no;yes;all;none"
+        - -s
+        - "Users;/storage/users;yes;no;no;${SAMBA_USER};${SAMBA_USER}"
+      networks:
+        storage_net:
+          ipv4_address: 10.40.0.10
+
   networks:
     # Reverse proxy network
     edge_net:
@@ -97,7 +123,6 @@
     # Storage network (Internal network)
     storage_net:
       driver: bridge
-      internal: true
       ipam:
         config:
           - subnet: 10.40.0.0/24
