@@ -15,10 +15,10 @@
       networks:
         edge_net:
           ipv4_address: 10.0.0.10
-        dns_net:
-          ipv4_address: 10.20.0.10
+        dns_cloudflare_net:
+          ipv4_address: 10.10.0.10
         apps_net:
-          ipv4_address: 10.30.0.10
+          ipv4_address: 10.20.0.10
 
     # --- ADGUARD HOME ---
     adguardhome:
@@ -35,8 +35,22 @@
         - ./config/adguard/work:/opt/adguardhome/work
         - ./config/adguard/conf:/opt/adguardhome/conf
       networks:
-        dns_net:
-          ipv4_address: 10.20.0.20
+        dns_cloudflare_net:
+          ipv4_address: 10.10.0.20
+
+    # --- CLOUDFLARE TUNNEL ---
+    cloudflared:
+      image: cloudflare/cloudflared:latest
+      container_name: cloudflared
+      restart: unless-stopped
+      profiles:
+        - external_access
+      command: tunnel --no-autoupdate run
+      environment:
+        TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+      networks:
+        dns_cloudflare_net:
+          ipv4_address: 10.10.0.30
 
     # --- PORTAINER ---
     portainer:
@@ -50,7 +64,7 @@
         - ./config/portainer:/data
       networks:
         apps_net:
-          ipv4_address: 10.30.0.20
+          ipv4_address: 10.20.0.20
 
     # --- DOZZLE ---
     dozzle:
@@ -63,7 +77,7 @@
         - /var/run/docker.sock:/var/run/docker.sock:ro
       networks:
         apps_net:
-          ipv4_address: 10.30.0.30
+          ipv4_address: 10.20.0.30
 
     # --- NEXTCLOUD ---
     nextcloud:
@@ -75,7 +89,7 @@
         - ./storage/users/nextcloud_data:/var/www/html/data
       environment:
         TZ: ${TZ}
-        MYSQL_HOST: 10.50.0.20       
+        MYSQL_HOST: 10.40.0.20       
         MYSQL_DATABASE: nextcloud
         MYSQL_USER: nextcloud
         MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
@@ -84,9 +98,9 @@
         NEXTCLOUD_TRUSTED_DOMAINS: cloud.home ${SERVER_IP}
       networks:
         apps_net:
-          ipv4_address: 10.30.0.40
+          ipv4_address: 10.20.0.40
         nextcloud_db_net:          
-          ipv4_address: 10.50.0.10
+          ipv4_address: 10.40.0.10
     
     # --- JELLYFIN MEDIA SERVER ---
     jellyfin:
@@ -101,7 +115,7 @@
         TZ: ${TZ}
       networks:
         apps_net:
-          ipv4_address: 10.30.0.50
+          ipv4_address: 10.20.0.50
 
     # --- SAMBA (NAS) ---
     samba:
@@ -128,7 +142,7 @@
         - "Users;/storage/users;yes;no;no;${SAMBA_USER};${SAMBA_USER}"
       networks:
         storage_net:
-          ipv4_address: 10.40.0.10
+          ipv4_address: 10.30.0.10
 
     # --- NEXTCLOUD DATABASE (Totalmente aislada) ---
     db_nextcloud:
@@ -145,7 +159,7 @@
         MYSQL_USER: nextcloud
       networks:
         nextcloud_db_net:    
-          ipv4_address: 10.50.0.20
+          ipv4_address: 10.40.0.20
 
   networks:
     # Reverse proxy network
@@ -155,33 +169,26 @@
         config:
           - subnet: 10.0.0.0/27      
 
-    # Cloudflare tunnel network
-    tunnel_net:
+    # DNS and Cloudflare network
+    dns_cloudflare_net:
       driver: bridge
       ipam:
         config:
           - subnet: 10.10.0.0/27
-
-    # DNS network
-    dns_net:
-      driver: bridge
-      ipam:
-        config:
-          - subnet: 10.20.0.0/27
 
     # Apps network
     apps_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.30.0.0/24
+          - subnet: 10.20.0.0/24
 
     # Storage network
     storage_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.40.0.0/28
+          - subnet: 10.30.0.0/28
 
     # Nexcloud_db network (Internal)
     nextcloud_db_net:
@@ -189,4 +196,4 @@
       internal: true                 
       ipam:
         config:
-          - subnet: 10.50.0.0/27
+          - subnet: 10.40.0.0/27
