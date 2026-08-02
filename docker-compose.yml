@@ -15,6 +15,8 @@
       networks:
         edge_net:
           ipv4_address: 10.0.0.10
+        dns_net:
+          ipv4_address: 10.20.0.10
         apps_net:
           ipv4_address: 10.30.0.10
 
@@ -24,7 +26,6 @@
       container_name: adguardhome
       restart: unless-stopped
       ports:
-        # Puerto DNS (TCP y UDP)
         - "53:53/tcp"
         - "53:53/udp"
         # Descomentar las siguientes líneas SOLO la primera vez para ejecutar el asistente inicial e ingresar a la interfaz web de AdGuard Home y añadir filtro *.home apuntando a la ip fija del server. Luego comentar nuevamente para evitar tener abiertos puertos innecesarios.:
@@ -35,8 +36,7 @@
         - ./config/adguard/conf:/opt/adguardhome/conf
       networks:
         dns_net:
-          ipv4_address: 10.20.0.10
-        edge_net:
+          ipv4_address: 10.20.0.20
 
     # --- PORTAINER ---
     portainer:
@@ -65,6 +65,29 @@
         apps_net:
           ipv4_address: 10.30.0.30
 
+    # --- NEXTCLOUD ---
+    nextcloud:
+      image: nextcloud:apache
+      container_name: nextcloud
+      restart: unless-stopped
+      volumes:
+        - ./config/nextcloud/html:/var/www/html
+        - ./storage/users/nextcloud_data:/var/www/html/data
+      environment:
+        TZ: ${TZ}
+        MYSQL_HOST: 10.50.0.20       
+        MYSQL_DATABASE: nextcloud
+        MYSQL_USER: nextcloud
+        MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+        NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+        NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+        NEXTCLOUD_TRUSTED_DOMAINS: cloud.home ${SERVER_IP}
+      networks:
+        apps_net:
+          ipv4_address: 10.30.0.40
+        nextcloud_db_net:          
+          ipv4_address: 10.50.0.10
+    
     samba:
       image: dperson/samba:latest
       container_name: samba
@@ -77,7 +100,7 @@
         - ./storage/media:/storage/media
         - ./storage/users:/storage/users
       environment:
-        TZ: Europe/Madrid
+        TZ: ${TZ}
       command:
         - -u
         - "${SAMBA_USER};${SAMBA_PASSWORD}"
@@ -91,27 +114,44 @@
         storage_net:
           ipv4_address: 10.40.0.10
 
+    # --- NEXTCLOUD DATABASE (Totalmente aislada) ---
+    db_nextcloud:
+      image: mariadb:10.11
+      container_name: db_nextcloud
+      restart: unless-stopped
+      command: --transaction-isolation=READ-COMMITTED --log-bin-trust-function-creators=1
+      volumes:
+        - ./config/nextcloud_db:/var/lib/mysql
+      environment:
+        MYSQL_ROOT_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+        MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+        MYSQL_DATABASE: nextcloud
+        MYSQL_USER: nextcloud
+      networks:
+        nextcloud_db_net:    
+          ipv4_address: 10.50.0.20
+
   networks:
     # Reverse proxy network
     edge_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.0.0.0/24      
+          - subnet: 10.0.0.0/27      
 
     # Cloudflare tunnel network
     tunnel_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.10.0.0/24
+          - subnet: 10.10.0.0/27
 
     # DNS network
     dns_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.20.0.0/24
+          - subnet: 10.20.0.0/27
 
     # Apps network
     apps_net:
@@ -120,9 +160,17 @@
         config:
           - subnet: 10.30.0.0/24
 
-    # Storage network (Internal network)
+    # Storage network
     storage_net:
       driver: bridge
       ipam:
         config:
-          - subnet: 10.40.0.0/24
+          - subnet: 10.40.0.0/28
+
+    # Nexcloud_db network (Internal)
+    nextcloud_db_net:
+      driver: bridge
+      internal: true                 
+      ipam:
+        config:
+          - subnet: 10.50.0.0/27
