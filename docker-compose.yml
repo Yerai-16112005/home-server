@@ -88,6 +88,22 @@
         nextcloud_db_net:          
           ipv4_address: 10.50.0.10
     
+    # --- JELLYFIN MEDIA SERVER ---
+    jellyfin:
+      image: jellyfin/jellyfin:latest
+      container_name: jellyfin
+      restart: unless-stopped
+      volumes:
+        - ./config/jellyfin:/config
+        - ./config/jellyfin_cache:/cache
+        - ./storage/media:/media:ro
+      environment:
+        TZ: ${TZ}
+      networks:
+        apps_net:
+          ipv4_address: 10.30.0.50
+
+    # --- SAMBA (NAS) ---
     samba:
       image: dperson/samba:latest
       container_name: samba
