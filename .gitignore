@@ -1,7 +1,6 @@
 # Archivos de variables de entorno y secretos
 .env
-*.env
-*.env.local
+notas.txt
 
 #Archivos de configuración de contenedores generados por los contenedores al iniciar y configurarse
 config/
@@ -17,4 +16,3 @@ logs/
 .DS_Store
 Thumbs.db
 
-notas.txt

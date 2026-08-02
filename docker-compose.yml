@@ -2,13 +2,14 @@
 
     # --- REVERSE PROXY ---
     npm:
-      image: 'jc21/nginx-proxy-manager:latest'
+      image: 'jc21/nginx-proxy-manager:2.15.1'
       container_name: npm
       restart: unless-stopped
       ports:
         - '80:80'     
-        - '443:443'   
-        - '81:81'     
+        - '443:443'
+        # Descomentar la siguiente linea solo para la configuracion, ya que no tiene sentido dejar el portal de administracion del proxy abierto   
+        #- '81:81'     
       volumes:
         - ./config/npm/data:/data
         - ./config/npm/letsencrypt:/etc/letsencrypt
@@ -22,7 +23,7 @@
 
     # --- ADGUARD HOME ---
     adguardhome:
-      image: adguard/adguardhome:latest
+      image: adguard/adguardhome:v0.107.78
       container_name: adguardhome
       restart: unless-stopped
       ports:
@@ -40,7 +41,7 @@
 
     # --- CLOUDFLARE TUNNEL ---
     cloudflared:
-      image: cloudflare/cloudflared:latest
+      image: cloudflare/cloudflared:2026.7.3
       container_name: cloudflared
       restart: unless-stopped
       profiles:
@@ -54,7 +55,7 @@
 
     # --- PORTAINER ---
     portainer:
-      image: portainer/portainer-ce:latest
+      image: portainer/portainer-ce:2.39.5
       container_name: portainer
       restart: unless-stopped
       security_opt:
@@ -68,7 +69,7 @@
 
     # --- DOZZLE ---
     dozzle:
-      image: amir20/dozzle:latest
+      image: amir20/dozzle:v10.6.14
       container_name: dozzle
       restart: unless-stopped
       security_opt:
@@ -81,7 +82,7 @@
 
     # --- NEXTCLOUD ---
     nextcloud:
-      image: nextcloud:apache
+      image: nextcloud:34-apache
       container_name: nextcloud
       restart: unless-stopped
       volumes:
@@ -104,7 +105,7 @@
     
     # --- JELLYFIN MEDIA SERVER ---
     jellyfin:
-      image: jellyfin/jellyfin:latest
+      image: jellyfin/jellyfin:10.11.11
       container_name: jellyfin
       restart: unless-stopped
       volumes:
@@ -119,27 +120,19 @@
 
     # --- SAMBA (NAS) ---
     samba:
-      image: dperson/samba:latest
+      image: crazymax/samba:4.22.8
       container_name: samba
       restart: unless-stopped
       ports:
-        - "139:139"
-        - "445:445"
+        # Restringido a la IP local del servidor para evitar exposición innecesaria
+        - "${SERVER_IP}:445:445"
       volumes:
+        - ./config/samba:/data              # config.yml y datos internos de samba
         - ./storage/public:/storage/public
         - ./storage/media:/storage/media
         - ./storage/users:/storage/users
       environment:
         TZ: ${TZ}
-      command:
-        - -u
-        - "${SAMBA_USER};${SAMBA_PASSWORD}"
-        - -s
-        - "Public;/storage/public;yes;no;yes;all;none"
-        - -s
-        - "Media;/storage/media;yes;no;yes;all;none"
-        - -s
-        - "Users;/storage/users;yes;no;no;${SAMBA_USER};${SAMBA_USER}"
       networks:
         storage_net:
           ipv4_address: 10.30.0.10
@@ -153,7 +146,7 @@
       volumes:
         - ./config/nextcloud_db:/var/lib/mysql
       environment:
-        MYSQL_ROOT_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+        MYSQL_ROOT_PASSWORD: ${NEXTCLOUD_DB_ROOT_PASSWORD}
         MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
         MYSQL_DATABASE: nextcloud
         MYSQL_USER: nextcloud
