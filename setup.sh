@@ -108,9 +108,14 @@ if [[ -f "$SAMBA_CONFIG" ]]; then
     info "config/samba/config.yml ya existe, no se sobreescribe"
 else
     # Leer variables del .env para interpolar
+    # IMPORTANTE: la imagen crazymax/samba NO sustituye variables de entorno
+    # en config.yml — hay que escribir los valores reales directamente
     source <(grep -v '^#' .env | grep '=' | sed 's/^/export /')
 
     SAMBA_USER="${SAMBA_USER:-sambauser}"
+    SAMBA_PASSWORD="${SAMBA_PASSWORD:-}"
+
+    [[ -z "$SAMBA_PASSWORD" ]] && error "SAMBA_PASSWORD no está definida en .env"
 
     cat > "$SAMBA_CONFIG" << EOF
 auth:
@@ -118,10 +123,13 @@ auth:
     group: ${SAMBA_USER}
     uid: 1000
     gid: 1000
-    password: \${SAMBA_PASSWORD}
+    password: ${SAMBA_PASSWORD}
 
 global:
   - "server min protocol = SMB2"
+  - "netbios name = nas"
+  - "netbios aliases = nas.home"
+  - "server string = nas.home"
 
 share:
   # Carpeta pública: accesible por todos sin autenticación
@@ -148,6 +156,8 @@ share:
     writelist: ${SAMBA_USER}
 EOF
     ok "Creado: $SAMBA_CONFIG"
+    warn "config/samba/config.yml contiene la contraseña en texto plano."
+    warn "Está en .gitignore — no lo subas al repositorio."
 fi
 
 # =============================================================================
@@ -207,16 +217,24 @@ fi
 section "── Listo ────────────────────────────────────────────────────────"
 
 echo ""
-echo -e "  Estructura de directorios creada."
-echo -e "  Para arrancar todos los servicios base:"
-echo -e ""
-echo -e "    ${BOLD}docker compose up -d${NC}"
-echo -e ""
-echo -e "  Para arrancar también el túnel de Cloudflare:"
-echo -e ""
-echo -e "    ${BOLD}docker compose --profile external_access up -d${NC}"
-echo -e ""
-echo -e "  ${YELLOW}Recuerda:${NC} la primera vez que levantes AdGuard Home, descomenta"
-echo -e "  temporalmente los puertos 3000 y 8080 en docker-compose.yml para"
-echo -e "  acceder al asistente de configuración inicial."
+echo -e "  Estructura de directorios creada. Pasos para el primer arranque:"
+echo ""
+echo -e "  ${BOLD}1.${NC} Descomenta el puerto ${BOLD}81${NC} de NPM en docker-compose.yml:"
+echo -e "     Busca el comentario '# - \"81:81\"' bajo el servicio npm y descoméntalo."
+echo -e "     Lo necesitas para acceder al panel de administración de NPM la primera vez."
+echo -e "     ${YELLOW}Recuerda volver a comentarlo una vez hayas terminado la configuración.${NC}"
+echo ""
+echo -e "  ${BOLD}2.${NC} Descomenta los puertos ${BOLD}3000 y 8080${NC} de AdGuard en docker-compose.yml:"
+echo -e "     Los necesitas para el asistente de configuración inicial de AdGuard Home."
+echo -e "     ${YELLOW}Recuerda volver a comentarlos una vez hayas terminado la configuración.${NC}"
+echo ""
+echo -e "  ${BOLD}3.${NC} Arranca los servicios base:"
+echo -e "     ${BOLD}docker compose up -d${NC}"
+echo ""
+echo -e "  ${BOLD}4.${NC} Para activar también el túnel de Cloudflare:"
+echo -e "     ${BOLD}docker compose --profile external_access up -d${NC}"
+echo ""
+echo -e "  ${BOLD}5.${NC} Para acceder al NAS desde tu red local:"
+echo -e "     Shares públicos:  ${BOLD}smb://nas.home${NC}"
+echo -e "     Carpeta privada:  ${BOLD}smb://nas.home/Users${NC}  (requiere usuario y contraseña)"
 echo ""
