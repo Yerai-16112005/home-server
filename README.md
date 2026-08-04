@@ -54,62 +54,75 @@ Al clonar y utilizar este repositorio aceptas que:
 
 El stack utiliza **cinco redes Docker completamente aisladas entre sí** para segmentar el tráfico y reducir la superficie de ataque. Cada contenedor solo tiene acceso a las redes que necesita y ninguna más.
 
-```
-  ┌─────────────────────────────────────────────────────────────────┐
-  │                      RED LOCAL (LAN)                            │
-  │   Dispositivos: PCs, móviles, Smart TVs, etc.                   │
-  └──────────┬──────────────────────────────────────────────────────┘
-             │  DNS (UDP/TCP 53)
-             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │               dns_cloudflare_net  10.10.0.0/27               │
-  │  ┌─────────────────────────────┐  ┌────────────────────────┐ │
-  │  │      AdGuard Home           │  │   Cloudflare Tunnel    │ │
-  │  │      10.10.0.20             │  │   10.10.0.30           │ │
-  │  │  Resuelve *.home → SERVER_IP│  │  (perfil opcional)     │ │
-  │  └──────────────┬──────────────┘  └────────────┬───────────┘ │
-  └─────────────────│────────────────────────────── │ ────────────┘
-                    │                               │
-                    │  HTTP/HTTPS (80/443)          │ HTTPS cifrado
-                    ▼                               ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │                    edge_net  10.0.0.0/27                      │
-  │  ┌──────────────────────────────────────────────────────────┐ │
-  │  │               Nginx Proxy Manager  10.0.0.10             │ │
-  │  │    Enruta cada dominio .home al contenedor correcto       │ │
-  │  │    adguard.home  cloud.home  media.home  portainer.home   │ │
-  │  └──────────────────────────┬───────────────────────────────┘ │
-  └─────────────────────────────│────────────────────────────────┘
-                                │
-  ┌─────────────────────────────│────────────────────────────────┐
-  │              apps_net  10.20.0.0/24                           │
-  │                             │                                 │
-  │     ┌───────────┬───────────┼────────────┬──────────┐        │
-  │     ▼           ▼           ▼            ▼          ▼        │
-  │ ┌────────┐ ┌─────────┐ ┌────────┐ ┌──────────┐ ┌───────┐   │
-  │ │  NPM   │ │Nextcloud│ │Jellyfin│ │Portainer │ │Dozzle │   │
-  │ │.10     │ │.40      │ │.50     │ │.20       │ │.30    │   │
-  │ └────────┘ └────┬────┘ └────────┘ └──────────┘ └───────┘   │
-  └─────────────────│────────────────────────────────────────────┘
-                    │
-  ┌─────────────────│──────────────────┐
-  │  nextcloud_db_net  10.40.0.0/27    │   ← internal: true
-  │       (red completamente aislada)  │     Sin acceso al exterior
-  │  ┌────────────────────────────┐    │
-  │  │     MariaDB  10.40.0.20    │    │
-  │  │  Solo accesible desde      │    │
-  │  │  Nextcloud (10.40.0.10)    │    │
-  │  └────────────────────────────┘    │
-  └────────────────────────────────────┘
+```mermaid
+flowchart TD
+    classDef wan fill:#1e293b,stroke:#475569,color:#f8fafc;
+    classDef lan fill:#0f172a,stroke:#3b82f6,color:#f8fafc;
+    classDef dnsnet fill:#064e3b,stroke:#10b981,color:#ecfdf5;
+    classDef edgenet fill:#1e3a8a,stroke:#3b82f6,color:#eff6ff;
+    classDef appsnet fill:#4c1d95,stroke:#8b5cf6,color:#f5f3ff;
+    classDef dbnet fill:#7f1d1d,stroke:#ef4444,color:#fef2f2;
+    classDef storagenet fill:#78350f,stroke:#f59e0b,color:#fffbeb;
 
-  ┌────────────────────────────────────────────────────────┐
-  │              storage_net  10.30.0.0/28                  │
-  │  ┌──────────────────────────────────────────────────┐  │
-  │  │              Samba  10.30.0.10                   │  │
-  │  │  Puerto 445 expuesto SOLO a SERVER_IP (no 0.0.0.0)│  │
-  │  │  /storage/public  /storage/media  /storage/users  │  │
-  │  └──────────────────────────────────────────────────┘  │
-  └────────────────────────────────────────────────────────┘
+    subgraph WAN ["🌐 Internet / Exterior"]
+        CF_CDN["Cloudflare CDN / Usuarios Remotos"]
+    end
+    class WAN wan;
+
+    subgraph LAN ["🏠 Red Local LAN - 192.168.1.X"]
+        CLIENTS["PCs · Móviles · Smart TVs · Clientes NAS"]
+    end
+    class LAN lan;
+
+    subgraph DNS_NET ["🛡️ dns_cloudflare_net · 10.10.0.0/27"]
+        ADGUARD["AdGuard Home<br/>10.10.0.20 DNS<br/>*.home → SERVER_IP"]
+        CLOUDFLARE["Cloudflare Tunnel<br/>10.10.0.30 cloudflared<br/>Perfil: external_access"]
+    end
+    class DNS_NET dnsnet;
+
+    subgraph EDGE_NET ["🔀 edge_net · 10.0.0.0/27"]
+        NPM["Nginx Proxy Manager<br/>10.0.0.10 Puertos 80 / 443<br/>Enrutador HTTP/HTTPS"]
+    end
+    class EDGE_NET edgenet;
+
+    subgraph APPS_NET ["🚀 apps_net · 10.20.0.0/24"]
+        NC["Nextcloud<br/>10.20.0.40"]
+        JF["Jellyfin<br/>10.20.0.50"]
+        PT["Portainer<br/>10.20.0.20"]
+        DZ["Dozzle<br/>10.20.0.30"]
+    end
+    class APPS_NET appsnet;
+
+    subgraph DB_NET ["🔒 nextcloud_db_net · 10.40.0.0/27 internal"]
+        MARIADB["MariaDB 10.11<br/>10.40.0.20<br/>Solo acceso desde Nextcloud"]
+    end
+    class DB_NET dbnet;
+
+    subgraph STORAGE_NET ["📂 storage_net · 10.30.0.0/28"]
+        SAMBA["Samba NAS<br/>10.30.0.10<br/>Puerto 445 SMB"]
+    end
+    class STORAGE_NET storagenet;
+
+    %% --- PASO 1: RESOLUCIÓN DNS ---
+    CLIENTS -->|"1. Consulta DNS"| ADGUARD
+    ADGUARD -..->|"Resolución DNS"| CLIENTS
+
+    %% --- PASO 2: CONEXIONES DIRECTAS DESDE EL CLIENTE ---
+    CLIENTS -->|"2a. Petición Web HTTP/HTTPS (80/443)"| NPM
+    CLIENTS -->|"2b. Conexión NAS SMB (445)"| SAMBA
+
+    %% --- ACCESO EXTERNO VÍA CLOUDFLARE ---
+    CF_CDN -->|"HTTPS Cifrado"| CLOUDFLARE
+    CLOUDFLARE -->|"Proxy HTTP Interno"| NPM
+
+    %% --- ENRUTAMIENTO DE NPM A APPS ---
+    NPM -->|"cloud.home"| NC
+    NPM -->|"media.home"| JF
+    NPM -->|"portainer.home"| PT
+    NPM -->|"dozzle.home"| DZ
+
+    %% --- BASE DE DATOS AISLADA ---
+    NC <==>|"Red Interna Aislada"| MARIADB
 ```
 
 ### Tabla de redes
