@@ -15,11 +15,30 @@
 
 ---
 
+> **⚠️ Aviso importante:** Esta configuración está pensada como punto de partida funcional, no como solución de producción endurecida. Cubre los fundamentos de seguridad (redes aisladas, puertos restringidos, sin credenciales en el código), pero cada servicio admite configuración adicional mucho más avanzada: autenticación de dos factores, cifrado en reposo, auditoría de accesos, alertas, backups automatizados, hardening de Samba, HTTPS forzado, cabeceras de seguridad HTTP, fail2ban, etc. Se recomienda encarecidamente investigar y aplicar las medidas adicionales que correspondan a tu caso de uso antes de almacenar datos sensibles.
+
+---
+
+## ⚠️ Descargo de Responsabilidad
+
+**Este repositorio se proporciona tal cual, sin garantías de ningún tipo.**
+
+El autor no se hace responsable de ningún daño, pérdida de datos, fallo de seguridad, acceso no autorizado, interrupción del servicio ni cualquier otro perjuicio que pueda derivarse del uso, modificación o despliegue de este proyecto, ya sea de forma directa o indirecta.
+
+Al clonar y utilizar este repositorio aceptas que:
+
+- Eres el único responsable de la seguridad de tu infraestructura y de los datos que almacenes en ella.
+- Debes realizar copias de seguridad periódicas de tus datos. Este stack no incluye ningún mecanismo de backup por defecto.
+- Si expones algún servicio a Internet (por ejemplo mediante Cloudflare Tunnel), la responsabilidad de securizarlo adecuadamente es exclusivamente tuya.
+- El uso de este proyecto en entornos de producción o con datos críticos queda bajo tu propio riesgo.
+
+---
+
 ## 📦 Servicios
 
 | Servicio | URL local | Descripción |
 | :--- | :--- | :--- |
-| **Nginx Proxy Manager** | `http://127.0.0.1:81` *(setup)* | Reverse proxy y gestión de certificados SSL |
+| **Nginx Proxy Manager** | `http://127.0.0.1:81` *(solo setup)* | Reverse proxy y gestión de certificados SSL |
 | **AdGuard Home** | `http://adguard.home` | DNS local con bloqueo de publicidad |
 | **Nextcloud** | `http://cloud.home` | Nube privada y sincronización de archivos |
 | **Jellyfin** | `http://media.home` | Servidor de medios (películas, series, música) |
@@ -27,49 +46,81 @@
 | **Dozzle** | `http://dozzle.home` | Visor de logs de contenedores en tiempo real |
 | **Samba (NAS)** | `smb://nas.home` | Almacenamiento compartido en red local |
 
+> **Requisito para acceder por nombre de dominio:** Para que `cloud.home`, `media.home` y el resto de dominios `.home` funcionen, el dispositivo desde el que accedes debe tener configurado como **servidor DNS primario la IP de tu servidor** (donde corre AdGuard Home). Si el DNS de tu dispositivo o router sigue apuntando a otro servidor (Google, tu ISP, etc.), los dominios `.home` no resolverán. Consulta la sección [Configuración del DNS en tus dispositivos](#-configuración-del-dns-en-tus-dispositivos) para más detalles.
+
 ---
 
 ## 📐 Arquitectura de Red
 
-El stack utiliza **cinco redes Docker aisladas** para segmentar el tráfico y reducir la superficie de ataque. La base de datos de Nextcloud vive en una red `internal: true` sin acceso al exterior.
+El stack utiliza **cinco redes Docker completamente aisladas entre sí** para segmentar el tráfico y reducir la superficie de ataque. Cada contenedor solo tiene acceso a las redes que necesita y ninguna más.
 
 ```
-  Dispositivos de la red local
-           │
-           ▼
-  ┌─────────────────────┐
-  │    AdGuard Home     │  dns_cloudflare_net (10.10.0.0/27)
-  │  DNS · Puerto 53    │  *.home  ──►  IP del servidor
-  └──────────┬──────────┘
-             │
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                      RED LOCAL (LAN)                            │
+  │   Dispositivos: PCs, móviles, Smart TVs, etc.                   │
+  └──────────┬──────────────────────────────────────────────────────┘
+             │  DNS (UDP/TCP 53)
              ▼
-  ┌─────────────────────┐
-  │  Nginx Proxy Manager│  edge_net (10.0.0.0/27)
-  │  Puerto 80 / 443    │  Enruta por hostname al contenedor correcto
-  └──────────┬──────────┘
-             │
-      apps_net (10.20.0.0/24)
-    ┌─────────┼──────────┬──────────┬──────────┐
-    ▼         ▼          ▼          ▼          ▼
-Nextcloud  Jellyfin  Portainer  Dozzle   (Cloudflare
-    │                                      Tunnel)
-    │  nextcloud_db_net (10.40.0.0/27 · internal)
-    ▼
- MariaDB          storage_net (10.30.0.0/28)
-                       │
-                       ▼
-                     Samba
+  ┌──────────────────────────────────────────────────────────────┐
+  │               dns_cloudflare_net  10.10.0.0/27               │
+  │  ┌─────────────────────────────┐  ┌────────────────────────┐ │
+  │  │      AdGuard Home           │  │   Cloudflare Tunnel    │ │
+  │  │      10.10.0.20             │  │   10.10.0.30           │ │
+  │  │  Resuelve *.home → SERVER_IP│  │  (perfil opcional)     │ │
+  │  └──────────────┬──────────────┘  └────────────┬───────────┘ │
+  └─────────────────│────────────────────────────── │ ────────────┘
+                    │                               │
+                    │  HTTP/HTTPS (80/443)          │ HTTPS cifrado
+                    ▼                               ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    edge_net  10.0.0.0/27                      │
+  │  ┌──────────────────────────────────────────────────────────┐ │
+  │  │               Nginx Proxy Manager  10.0.0.10             │ │
+  │  │    Enruta cada dominio .home al contenedor correcto       │ │
+  │  │    adguard.home  cloud.home  media.home  portainer.home   │ │
+  │  └──────────────────────────┬───────────────────────────────┘ │
+  └─────────────────────────────│────────────────────────────────┘
+                                │
+  ┌─────────────────────────────│────────────────────────────────┐
+  │              apps_net  10.20.0.0/24                           │
+  │                             │                                 │
+  │     ┌───────────┬───────────┼────────────┬──────────┐        │
+  │     ▼           ▼           ▼            ▼          ▼        │
+  │ ┌────────┐ ┌─────────┐ ┌────────┐ ┌──────────┐ ┌───────┐   │
+  │ │  NPM   │ │Nextcloud│ │Jellyfin│ │Portainer │ │Dozzle │   │
+  │ │.10     │ │.40      │ │.50     │ │.20       │ │.30    │   │
+  │ └────────┘ └────┬────┘ └────────┘ └──────────┘ └───────┘   │
+  └─────────────────│────────────────────────────────────────────┘
+                    │
+  ┌─────────────────│──────────────────┐
+  │  nextcloud_db_net  10.40.0.0/27    │   ← internal: true
+  │       (red completamente aislada)  │     Sin acceso al exterior
+  │  ┌────────────────────────────┐    │
+  │  │     MariaDB  10.40.0.20    │    │
+  │  │  Solo accesible desde      │    │
+  │  │  Nextcloud (10.40.0.10)    │    │
+  │  └────────────────────────────┘    │
+  └────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────┐
+  │              storage_net  10.30.0.0/28                  │
+  │  ┌──────────────────────────────────────────────────┐  │
+  │  │              Samba  10.30.0.10                   │  │
+  │  │  Puerto 445 expuesto SOLO a SERVER_IP (no 0.0.0.0)│  │
+  │  │  /storage/public  /storage/media  /storage/users  │  │
+  │  └──────────────────────────────────────────────────┘  │
+  └────────────────────────────────────────────────────────┘
 ```
 
-### Redes
+### Tabla de redes
 
-| Red | Subred | Propósito |
-| :--- | :--- | :--- |
-| `edge_net` | `10.0.0.0/27` | Tráfico HTTP/HTTPS entrante |
-| `dns_cloudflare_net` | `10.10.0.0/27` | DNS y túnel Cloudflare |
-| `apps_net` | `10.20.0.0/24` | Aplicaciones de usuario |
-| `storage_net` | `10.30.0.0/28` | NAS (Samba) |
-| `nextcloud_db_net` | `10.40.0.0/27` | Base de datos Nextcloud *(aislada)* |
+| Red | Subred | Propósito | Contenedores |
+| :--- | :--- | :--- | :--- |
+| `edge_net` | `10.0.0.0/27` | Tráfico HTTP/HTTPS entrante | NPM |
+| `dns_cloudflare_net` | `10.10.0.0/27` | DNS y túnel Cloudflare | AdGuard, Cloudflared, NPM |
+| `apps_net` | `10.20.0.0/24` | Aplicaciones de usuario | NPM, Nextcloud, Jellyfin, Portainer, Dozzle |
+| `storage_net` | `10.30.0.0/28` | NAS | Samba |
+| `nextcloud_db_net` | `10.40.0.0/27` | Base de datos *(aislada)* | Nextcloud, MariaDB |
 
 ---
 
@@ -106,6 +157,7 @@ home-server/
 - Linux con **Docker Engine** y **Docker Compose V2**
 - Puerto `53` libre en el host (para AdGuard como DNS)
 - Puerto `445` libre en el host (para Samba)
+- IP fija en el servidor dentro de tu red local
 
 ### 1. Clonar el repositorio
 
@@ -209,6 +261,22 @@ docker compose up -d --force-recreate npm adguardhome
 
 ---
 
+## 🌐 Configuración del DNS en tus Dispositivos
+
+Para acceder a `cloud.home`, `media.home` y el resto de dominios `.home`, **cada dispositivo desde el que quieras acceder debe usar AdGuard Home como servidor DNS primario**. Sin esto, los dominios no resolverán, ya que son dominios locales que no existen en Internet.
+
+Tienes dos opciones:
+
+**Opción A — Configurar el router (recomendado):**
+Entra en la configuración de tu router y establece la IP de tu servidor como servidor DNS primario. Todos los dispositivos de la red que obtengan su configuración por DHCP lo usarán automáticamente.
+
+**Opción B — Configurar cada dispositivo manualmente:**
+En la configuración de red de cada dispositivo (red Wi-Fi o Ethernet), cambia el DNS primario a la IP de tu servidor. El proceso varía según el sistema operativo.
+
+> Si tras configurar el DNS los dominios siguen sin resolver, asegúrate de que la regla `*.home → SERVER_IP` está correctamente creada en AdGuard Home y de que el contenedor está corriendo con `docker ps`.
+
+---
+
 ## 💾 NAS — Acceso a las carpetas compartidas
 
 El NAS es accesible desde cualquier dispositivo de la red local:
@@ -239,10 +307,21 @@ docker compose --profile external_access up -d
 
 ## 🔒 Notas de Seguridad
 
-- La base de datos de Nextcloud (`nextcloud_db_net`) está en una red `internal: true`: ningún otro contenedor ni el host pueden alcanzarla salvo Nextcloud.
-- El puerto 445 de Samba está restringido a la IP local del servidor (`SERVER_IP`), no expuesto a `0.0.0.0`.
-- Los puertos de administración (81, 3000, 8080) deben permanecer comentados excepto durante la configuración inicial.
+Esta configuración cubre una base de seguridad razonable para uso doméstico, pero **no es una solución endurecida para producción**. Algunas de las medidas ya implementadas:
+
+- La base de datos de Nextcloud (`nextcloud_db_net`) está en una red `internal: true`: ningún contenedor ni el host pueden alcanzarla salvo Nextcloud.
+- El puerto 445 de Samba está restringido a la IP local del servidor, no expuesto a `0.0.0.0`.
+- Los puertos de administración (81, 3000, 8080) deben permanecer comentados salvo durante la configuración inicial.
 - `config/samba/config.yml` contiene credenciales en texto plano y está excluido del repositorio vía `.gitignore`.
+
+Algunas mejoras adicionales que puedes implementar según tu nivel de exigencia:
+
+- HTTPS con certificados Let's Encrypt desde NPM para todos los servicios.
+- Autenticación de dos factores en Nextcloud y Portainer.
+- Fail2ban para bloquear intentos de acceso por fuerza bruta.
+- Backups automáticos de `config/` y `storage/` a un destino externo.
+- Auditoría de accesos y alertas en AdGuard Home.
+- VPN (WireGuard, Tailscale) como alternativa más segura al túnel de Cloudflare.
 
 ---
 
